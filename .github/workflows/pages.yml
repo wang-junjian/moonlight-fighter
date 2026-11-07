@@ -1,19 +1,22 @@
 name: Deploy playable demo to Pages
 
 # 仓库只提交源码：可玩站点是构建产物（app/dist/ 被 .gitignore 忽略），
-# 由本工作流在每次 push 到 main 时重新构建、自检并发布成 Pages 站点。
+# 由本工作流在每次 push 到 main 时重新构建、自检，然后发布到 gh-pages 分支，
+# 由 GitHub Pages 自己托管（Pages 站点 source = gh-pages 分支）。
 #
-# 发布地址：https://wangjunjian.com/moonlight-fighter/（项目站点，挂在子路径下）
-# 注意子路径不白屏是硬要求：src/main.tsx 的 basename 与 verify:pages 一道守住这一点。
+# 为什么不用 actions/deploy-pages（artifact 通道）：2026-11-07 首次部署成功，
+# 但之后连续三次在同一仓储的 artifact 部署都卡在 deployment 的 syncing_files
+# 阶段直到 10 分钟超时（GitHub 状态页当时全绿，重建 Pages 站点也没恢复）。
+# 换成 gh-pages 分支后 Pages 走分支构建链路，绕开这条卡死的同步通道。
+#
+# 发布地址：https://wangjunjian.com/moonlight-fighter/
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write   # 需要推送 gh-pages 分支
 
 # 同一时刻只允许一个部署在跑，且不取消进行中的部署（避免站点短暂空档）。
 concurrency:
@@ -70,17 +73,15 @@ jobs:
           touch site/.nojekyll
           printf 'Build of commit %s\n' "$GITHUB_SHA" > site/build.txt
           printf 'User-agent: *\nDisallow:\n' > site/robots.txt
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      # 只发布产物：gh-pages 分支上永远只有当前这一版，历史由 -f 覆盖，不会越滚越大。
+      - name: Publish to gh-pages branch
+        working-directory: ${{ github.workspace }}/site
+        run: |
+          git init -q
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -q -b gh-pages
+          git add -A
+          git commit -q -m "Deploy ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
