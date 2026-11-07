@@ -1,0 +1,86 @@
+name: Deploy playable demo to Pages
+
+# 仓库只提交源码：可玩站点是构建产物（app/dist/ 被 .gitignore 忽略），
+# 由本工作流在每次 push 到 main 时重新构建、自检并发布成 Pages 站点。
+#
+# 发布地址：https://wangjunjian.com/moonlight-fighter/（项目站点，挂在子路径下）
+# 注意子路径不白屏是硬要求：src/main.tsx 的 basename 与 verify:pages 一道守住这一点。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时刻只允许一个部署在跑，且不取消进行中的部署（避免站点短暂空档）。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+
+      # 防「构建顺手改了源码」：构建必须只写 dist/（含被忽略的 .game-build-files.json），
+      # 被跟踪文件一个都不许动，否则产物与提交的源码就对不上了。
+      - name: Build must not touch tracked files
+        run: test -z "$(git status --porcelain --untracked-files=no)"
+
+      # 发布门禁：把 dist 挂到 Pages 的项目站点子路径下，用真实浏览器确认「不白屏」。
+      # 单纯 curl 200 挡不住这个缺陷——basename 错了照样是 200 + 白屏。
+      - run: npx playwright install --with-deps chromium
+      - name: Pages sub-path render check
+        run: npm run verify:pages
+
+      # 完整游戏自检（对战流程、方向映射断言）。门禁是上一步；这一步暴露玩法回归，
+      # 失败不阻断发布，但会在 run 里留下明确警告，避免「站点能开但玩不了」被漏掉。
+      - name: Full gameplay self-check (non-blocking)
+        continue-on-error: true
+        run: npm run verify
+      - name: Upload shots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-shots
+          path: app/verification-shots/
+          if-no-files-found: ignore
+
+      - name: Assemble Pages site
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p site
+          cp -R app/dist/. site/
+          touch site/.nojekyll
+          printf 'Build of commit %s\n' "$GITHUB_SHA" > site/build.txt
+          printf 'User-agent: *\nDisallow:\n' > site/robots.txt
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

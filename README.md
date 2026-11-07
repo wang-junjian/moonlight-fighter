@@ -4,6 +4,12 @@
 
 ![绯夜对决 · Velvet Fight](home.webp)
 
+## 线上试玩
+
+**<https://wangjunjian.com/moonlight-fighter/>**
+
+纯前端、零后端依赖，可直接在浏览器里开打。站点由 GitHub Actions 在每次 push 到 `main` 时重新构建并发布到 GitHub Pages（见 `.github/workflows/pages.yml`），构建产物不入库。
+
 ## 项目结构
 
 ```
@@ -34,8 +40,11 @@ npm run dev
 | `npm run preview` | 本地预览生产构建 |
 | `npm run check` | 仅运行 TypeScript 类型检查 |
 | `npm run verify` | Playwright 自动化验证游戏流程 |
+| `npm run verify:pages` | 模拟 Pages 子路径部署，验证 `/moonlight-fighter/` 下不白屏 |
 
 Docker 部署：`docker build -t moonlight-fighter app/` 后运行镜像即可（80 端口）。
+
+> 部署在 Pages 项目站点时，页面挂在子路径下而不是站点根目录。`app/src/main.tsx` 会根据文档 URL 推导 `BrowserRouter` 的 basename，本地、Docker、Pages 三种环境共用同一份产物；改动路由或部署方式后请跑 `npm run verify:pages`。
 
 ## 操作方式
 
