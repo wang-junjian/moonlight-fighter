@@ -176,9 +176,20 @@ switch (shot.kind) {
 }
 await page.screenshot({ path: join(SHOTS, "01-title.png") });
 
-// 2) Enter playing
+// 2) Enter playing. CI runs on swiftshader: frames are slow, and the engine clamps dt,
+//    so the 1.85s intro timer takes far longer in wall-clock time than on a real GPU.
+//    A 7s budget therefore failed on the runner while the same build entered fight on
+//    hardware — budget by state change, not by a guess at frame rate.
 await page.keyboard.press("Space");
-await page.waitForFunction(() => window.__velvetDebug?.().phase === "fight", null, { timeout: 7000 });
+await page
+  .waitForFunction(() => window.__velvetDebug?.().phase === "fight", null, { timeout: 25000 })
+  .catch(async () => {
+    const d = await page.evaluate(() => (window.__velvetDebug ? window.__velvetDebug() : null));
+    fail(
+      `pressed Space but never reached phase "fight" (phase=${d?.phase ?? "unknown"}, fps=${d?.fps ?? "?"}). ` +
+      `If fps is in single digits the intro timer is starved by the dt clamp — raise the timeout rather than "fixing" input.`
+    );
+  });
 await page.waitForTimeout(150);
 
 // 3) Direction assertions for this 2.5D fighter: W jumps (y increases), D moves right (x increases).
