@@ -8,7 +8,7 @@
 
 **<https://wangjunjian.com/moonlight-fighter/>**
 
-纯前端、零后端依赖，可直接在浏览器里开打。站点由 GitHub Actions 在每次 push 到 `main` 时重新构建并发布到 GitHub Pages（见 `.github/workflows/pages.yml`），构建产物不入库。
+纯前端、零后端依赖，可直接在浏览器里开打。站点由 GitHub Actions 在每次 push 到 `main` 时重新构建、自检，再把产物推送到 `gh-pages` 分支由 GitHub Pages 托管（见 `.github/workflows/pages.yml`），构建产物不入库。
 
 ## 项目结构
 
